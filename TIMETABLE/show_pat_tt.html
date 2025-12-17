@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Faculty & Batch Timetable</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        table {
+            width: 80%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: center;
+            vertical-align: top;
+        }
+        th {
+            background: lightblue;
+        }
+        .title {
+            font-weight: bold;
+            font-size: 20px;
+            margin-top: 30px;
+        }
+        select, button {
+            padding: 5px 10px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .highlight {
+            background-color: yellow;
+            font-weight: bold;
+        }
+        hr {
+            border: 1px dashed #aaa;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>Upload CSV File</h2>
+<input type="file" id="csvFile" accept=".csv"><br>
+
+<label>Select View:</label>
+<select id="viewSelect" disabled>
+    <option value="">--Select--</option>
+</select>
+
+<div id="tables"></div>
+
+<script>
+let facultyTT = {};
+let batchTT = {};
+
+/* ---------- LOAD CSV ---------- */
+document.getElementById("csvFile").addEventListener("change", function () {
+    Papa.parse(this.files[0], {
+        header: true,
+        skipEmptyLines: true,
+        complete: function (result) {
+            processCSV(result.data);
+            populateDropdown();
+        }
+    });
+});
+
+/* ---------- PROCESS CSV ---------- */
+function processCSV(data) {
+    facultyTT = {};
+    batchTT = {};
+
+    data.forEach(row => {
+        const faculty = row["FACULTY"];
+        const batch = row["BATCH"];
+        const day = row["DAY"];
+        const sessionRaw = row["SESSION"];
+        const course = row["COURSE"];
+        const room = row["ROOM"];
+
+        if (!day || !sessionRaw) return;
+
+        const session =
+            sessionRaw.toString().toUpperCase() === "FN" || sessionRaw == 1 ? "FN" :
+            sessionRaw.toString().toUpperCase() === "AN" || sessionRaw == 2 ? "AN" : null;
+        if (!session) return;
+
+        /* FACULTY TIMETABLE */
+        if (faculty) {
+            facultyTT[faculty] ??= {};
+            facultyTT[faculty][day] ??= { FN: "", AN: "" };
+            facultyTT[faculty][day][session] =
+                `${course} | Room: ${room} | Batch: ${batch}`;
+        }
+
+        /* BATCH TIMETABLE */
+        if (batch) {
+            batchTT[batch] ??= {};
+            batchTT[batch][day] ??= { FN: "", AN: "" };
+            batchTT[batch][day][session] =
+                `${course} | Room: ${room} | Faculty: ${faculty}`;
+        }
+    });
+}
+
+/* ---------- DROPDOWN ---------- */
+function populateDropdown() {
+    const select = document.getElementById("viewSelect");
+    select.innerHTML = `
+        <option value="">--Select--</option>
+        <option value="ALL_FACULTIES">ALL FACULTIES</option>
+        <option value="ALL_BATCHES">ALL BATCHES</option>
+    `;
+
+    Object.keys(facultyTT).forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = `FAC_${f}`;
+        opt.textContent = `Faculty: ${f}`;
+        select.appendChild(opt);
+    });
+
+    select.disabled = false;
+    select.onchange = handleView;
+}
+
+/* ---------- VIEW HANDLER ---------- */
+function handleView() {
+    const value = this.value;
+    const container = document.getElementById("tables");
+    container.innerHTML = "";
+
+    if (value === "ALL_FACULTIES") {
+        Object.keys(facultyTT).forEach(f => showFacultyTable(f, true));
+    }
+    else if (value === "ALL_BATCHES") {
+        Object.keys(batchTT).forEach(b => showBatchTable(b, true));
+    }
+    else if (value.startsWith("FAC_")) {
+        showFacultyTable(value.replace("FAC_", ""), false);
+    }
+}
+
+/* ---------- FACULTY TABLE ---------- */
+function showFacultyTable(faculty, append) {
+    const container = document.getElementById("tables");
+    if (!append) container.innerHTML = "";
+
+    const days = ["MON","TUE","WED","THU","FRI","SAT"];
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `Faculty: ${faculty}`;
+
+    const table = document.createElement("table");
+    let html = `
+        <tr>
+            <th>DAY</th>
+            <th>FN</th>
+            <th rowspan="7">L<br>U<br>N<br>C<br>H</th>
+            <th>AN</th>
+        </tr>
+    `;
+
+    days.forEach(d => {
+        const fn = facultyTT[faculty][d]?.FN || "";
+        const an = facultyTT[faculty][d]?.AN || "";
+        html += `
+            <tr>
+                <td>${d}</td>
+                <td class="${fn.includes("VI-SU-B2") ? "highlight" : ""}">${fn}</td>
+                <td class="${an.includes("VI-SU-B2") ? "highlight" : ""}">${an}</td>
+            </tr>
+        `;
+    });
+
+    table.innerHTML = html;
+    container.appendChild(title);
+    container.appendChild(table);
+}
+
+/* ---------- BATCH TABLE ---------- */
+function showBatchTable(batch, append) {
+    const container = document.getElementById("tables");
+    if (!append) container.innerHTML = "";
+
+    const days = ["MON","TUE","WED","THU","FRI","SAT"];
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `Batch: ${batch}`;
+
+    const table = document.createElement("table");
+    let html = `
+        <tr>
+            <th>DAY</th>
+            <th>FN</th>
+            <th rowspan="7">L<br>U<br>N<br>C<br>H</th>
+            <th>AN</th>
+        </tr>
+    `;
+
+    days.forEach(d => {
+        const fn = batchTT[batch][d]?.FN || "";
+        const an = batchTT[batch][d]?.AN || "";
+        html += `
+            <tr>
+                <td>${d}</td>
+                <td class="${fn.includes("VI-SU-B2") ? "highlight" : ""}">${fn}</td>
+                <td class="${an.includes("VI-SU-B2") ? "highlight" : ""}">${an}</td>
+            </tr>
+        `;
+    });
+
+    table.innerHTML = html;
+    container.appendChild(title);
+    container.appendChild(table);
+}
+</script>
+
+</body>
+</html>
